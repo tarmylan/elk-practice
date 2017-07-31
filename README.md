@@ -6,7 +6,7 @@ Ubuntu 14.04
 <tr> <td> 172.16.10.222 </td><td> zk-kafka </td><td> node-1 </td> </tr>
 <tr> <td> 172.16.10.223 </td><td> zk-kafka </td><td> node-2 </td> </tr>
 <tr> <td> 172.16.10.224 </td><td> zk-kafka </td><td> node-3 </td> </tr>
-<tr> <td> 172.16.10.225 </td><td> logstash-elacticsearch </td><td> logrus->logstash->kafka </td> </tr>
+<tr> <td> 172.16.10.226 </td><td> logstash-elacticsearch </td><td> logrus->logstash->kafka </td> </tr>
 <tr> <td> 172.16.10.228 </td><td> logstash-elasticsearch-kibana </td><td> kafka->logstash->es->kibana </td> </tr> 
 </table></div>
 
@@ -152,7 +152,7 @@ path.logs: /home/ubuntu/elk/data/elasticsearch/logs
 bootstrap.memory_lock: true
 network.host: 172.16.10.228
 http.port: 9200
-discovery.zen.ping.unicast.hosts: ["172.16.10.225", "172.16.10.228"]
+discovery.zen.ping.unicast.hosts: ["172.16.10.226", "172.16.10.228"]
 discovery.zen.minimum_master_nodes: 2 
 ```
 
@@ -198,7 +198,7 @@ filter {
 
 output {
     elasticsearch {
-        hosts => [ "172.16.10.225","172.16.10.228" ]
+        hosts => [ "172.16.10.226","172.16.10.228" ]
         index => "logstash-log-%{+YYYY.MM.dd}"
 #workers => 5
         codec => "json"
@@ -264,7 +264,7 @@ http://172.16.10.228:5601
 ```text
 docker run -d --name="logspout" \
     --volume=/var/run/docker.sock:/var/run/docker.sock \
-    -e ROUTE_URIS=logstash+tcp://172.16.10.225:5000 \
+    -e ROUTE_URIS=logstash+tcp://172.16.10.226:5000 \
     bekt/logspout-logstash
 ```
 
