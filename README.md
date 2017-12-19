@@ -41,6 +41,9 @@ source ~/.profile
 ```
 
 # 修改 ulimit, elasticsearch 启动需求
+# elasticsearch can't run with root;
+# max file descriptors for elasticsearch process must increase to at least [65536]
+# max virtual memory areas vm.max_map_count must increase to at least [262144]
 
 sudo vim /etc/sysctl.conf
 ```text
@@ -102,6 +105,9 @@ server.3= 172.16.10.224:2888:3888
 # The id of the broker. This must be set to a unique integer for each broker.
 broker.id=1
 
+# A comma seperated list of directories under which to store log files
+log.dirs=/var/lib/kafka-logs
+
 # The address the socket server listens on. It will get the value returned from 
 # java.net.InetAddress.getCanonicalHostName() if not configured.
 #   FORMAT:
@@ -109,6 +115,7 @@ broker.id=1
 #   EXAMPLE:
 #     listeners = PLAINTEXT://your.host.name:9092
 listeners=PLAINTEXT://172.16.10.222:9092
+zookeeper.connect=172.16.10.222:2181,172.16.10.223:2181,172.16.10.224:2181
 ```
 
 启动服务
@@ -149,7 +156,7 @@ cluster.name: es-cluster
 node.name: node-1
 path.data: /home/ubuntu/elk/data/elasticsearch/data
 path.logs: /home/ubuntu/elk/data/elasticsearch/logs
-bootstrap.memory_lock: true
+#bootstrap.memory_lock: true
 network.host: 172.16.10.228
 http.port: 9200
 discovery.zen.ping.unicast.hosts: ["172.16.10.226", "172.16.10.228"]
