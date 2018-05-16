@@ -40,10 +40,12 @@ export CLASSPATH=$CLASSPATH:$JAVA_HOME/lib:$JRE_HOME/lib
 source ~/.profile
 ```
 
-# 修改 ulimit, elasticsearch 启动需求
+修改 ulimit, elasticsearch 启动需求
+```text
 # elasticsearch can't run with root;
 # max file descriptors for elasticsearch process must increase to at least [65536]
 # max virtual memory areas vm.max_map_count must increase to at least [262144]
+```
 
 sudo vim /etc/sysctl.conf
 ```text
@@ -73,18 +75,18 @@ $HOME/elk
 
 
 # zookeeper安装
-[zookeeper](http://zookeeper.apache.org/doc/trunk/zookeeperStarted.html)
+[zookeeper](http://zookeeper.apache.org/doc/current/zookeeperStarted.html)
 
 conf目录下增加文件zoo.cfg
 ```text
 tickTime=2000
-initLimit=10
-syncLimit=5
 dataDir=/home/ubuntu/elk/data/zookeeper
 clientPort=2181
-server.1= 172.16.10.222:2888:3888
-server.2= 172.16.10.223:2888:3888
-server.3= 172.16.10.224:2888:3888
+initLimit=5
+syncLimit=2
+server.1=$host1:2888:3888
+server.2=$host2:2888:3888
+server.3=$host3:2888:3888
 ```
 
 在配置的dataDir目录下创建一个myid文件，里面写入一个0-255之间的一个数字，每个zk上这个文件的数字要是不一样的，这些数字应该是从1开始，依次写每个服务器。
@@ -114,8 +116,8 @@ log.dirs=/var/lib/kafka-logs
 #     listeners = security_protocol://host_name:port
 #   EXAMPLE:
 #     listeners = PLAINTEXT://your.host.name:9092
-listeners=PLAINTEXT://172.16.10.222:9092
-zookeeper.connect=172.16.10.222:2181,172.16.10.223:2181,172.16.10.224:2181
+listeners=PLAINTEXT://$hostn:9092
+zookeeper.connect=$host1:2181,$host2:2181,$host3:2181
 ```
 
 启动服务
@@ -125,22 +127,22 @@ nohup bin/kafka-server-start.sh config/server.properties &
 
 Create a topic
 ```text
-bin/kafka-topics.sh --create --zookeeper 172.16.10.222:2181,172.16.10.223:2181,172.16.10.224:2181 --replication-factor 3 --partitions 1 --topic game-log
+bin/kafka-topics.sh --create --zookeeper $host1:2181,$host2:2181,$host3:2181 --replication-factor 3 --partitions 1 --topic game-log
 ```
 
 Okay but now that we have a cluster how can we know which broker is doing what? To see that run the "describe topics" command:
 ```text
-bin/kafka-topics.sh --describe --zookeeper 172.16.10.222:2181,172.16.10.223:2181,172.16.10.224:2181 --topic game-log
+bin/kafka-topics.sh --describe --zookeeper $host1:2181,$host2:2181,$host3:2181 --topic game-log
 ```
 
 Let's publish a few messages to our new topic:
 ```text
-bin/kafka-console-producer.sh --broker-list 172.16.10.222:9092,172.16.10.223:9092,172.16.10.224:9092 --topic game-log
+bin/kafka-console-producer.sh --broker-list $host1:9092,$host2:9092,$host3:9092 --topic game-log
 ```
 
 Now let's consume these messages:
 ```text
-bin/kafka-console-consumer.sh --zookeeper 172.16.10.222:2181,172.16.10.223:2181,172.16.10.224:2181  --from-beginning --topic game-log
+bin/kafka-console-consumer.sh --zookeeper $host1:2181,$host2:2181,$host3:2181  --from-beginning --topic game-log
 ```
 
 # elacticsearch
@@ -159,7 +161,7 @@ path.logs: /home/ubuntu/elk/data/elasticsearch/logs
 #bootstrap.memory_lock: true
 network.host: 172.16.10.228
 http.port: 9200
-discovery.zen.ping.unicast.hosts: ["172.16.10.226", "172.16.10.228"]
+discovery.zen.ping.unicast.hosts: [$host1, $host2, $host3]
 discovery.zen.minimum_master_nodes: 2 
 ```
 
@@ -170,11 +172,12 @@ kafka >> logstash >> elasticsearch
 ```text
 input {
     kafka {
-        bootstrap_servers => '172.16.10.222:9092,172.16.10.223:9092,172.16.10.224:9092'
+        bootstrap_servers => '$host1:9092,$host2:9092,$host3:9092'
         group_id => 'test_consumer-group'
         topics => ['game-log']
         consumer_threads => 5   
         decorate_events => true 
+        auto_offset_reset="earliest" # automatically reset the offset to the earliest offset 
         codec => "plain"
     } 
 }
@@ -203,11 +206,24 @@ filter {
     }   
 }
 
+filter {
+    geoip {
+        source => "client_ip"
+        target => "geoip"
+        #database => "/usr/local/logstash/etc/GeoLiteCity.dat"
+        add_field => [ "[geoip][coordinates]", "%{[geoip][longitude]}" ]
+        add_field => [ "[geoip][coordinates]", "%{[geoip][latitude]}"  ]
+    }  
+    mutate {
+        convert => ["[geoip][coordinates]", "float"]
+    }  
+}
+
 output {
     elasticsearch {
-        hosts => [ "172.16.10.226","172.16.10.228" ]
+        hosts => [$host1, $host2, $host3]
         index => "logstash-log-%{+YYYY.MM.dd}"
-#workers => 5
+        #workers => 5
         codec => "json"
     }
 
@@ -231,9 +247,22 @@ input {
     }   
 }
 
+
+filter {
+    mutate {
+        add_field => { "app" => "%{[docker][name]}" }
+    }
+    mutate {
+        gsub => [
+            "app", "/", ""
+        ]
+    }
+}
+
+
 output {
     kafka {
-        bootstrap_servers => '172.16.10.222:9092,172.16.10.223:9092,172.16.10.224:9092'
+        bootstrap_servers => '$host1:9092,$host2:9092,$host3:9092'
         topic_id => 'game-log'
 #workers => 5
         codec => "plain"
